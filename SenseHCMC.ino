@@ -1,4 +1,17 @@
 #include <ESP8266WiFi.h>
+#include "DHT.h"
+
+// run locally, ie. don't push values to server. values are logged to serial
+#define RUN_LOCAL 1
+
+// DHT11 sensor. Connect:
+//   pin 1 (vcc) to 3v3
+//   pin 2 (data) to pin defined DHTPIN below
+//   pin 4 (ground) to GND
+#define DHTPIN D6
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+const boolean useFahrenheit = false;
 
 // WIFI connection details
 const char* WIFI_SSID     = "<wifi ssid>";
@@ -8,26 +21,32 @@ const char* WIFI_PASSWORD = "<wifi password>";
 const char* CLOUD_HOST = "192.168.1.102";
 const int   CLOUD_PORT = 8888;
 
-const short READ_FREQUENCY = 5000;
+const short READ_FREQUENCY = 10000;
 
-// PM2.5 read
+// PM2.5 read (random!)
 const byte PM25_RAND_RANGE = 100;
 const byte PM25_RAND_FLOOR = 22;
-long getSensorReadPM25() {
+long readPM25() {
   return random(PM25_RAND_RANGE) + PM25_RAND_FLOOR;
 }
 
-// Temperature read
-const byte TEMP_RAND_RANGE = 10;
-const float TEMP_RAND_FLOOR = 24.0;
-float getSensorReadTemperature() {
-  return TEMP_RAND_FLOOR + random(TEMP_RAND_RANGE);
+float readTemperature() {
+  return dht.readTemperature(useFahrenheit);
+}
+
+float readHumidity() {
+  return dht.readHumidity();
+}
+
+float readHeatIndex(float temperature, float humidity) {
+  return dht.computeHeatIndex(temperature, humidity, useFahrenheit);
 }
 
 void setup() {
+  dht.begin();
   randomSeed(analogRead(0));
-
   Serial.begin(115200);
+
   delay(10);
   Serial.print("Connecting to ");
   Serial.println(WIFI_SSID);
@@ -48,32 +67,46 @@ void loop() {
   delay(READ_FREQUENCY);
 
   WiFiClient client;
-  if (!client.connect(CLOUD_HOST, CLOUD_PORT)) {
-    Serial.println("connection failed");
+  if (!RUN_LOCAL) {
+    if (!client.connect(CLOUD_HOST, CLOUD_PORT)) {
+      Serial.println("connection failed");
+      return;
+    }
+  }
+
+  // DHT11 reads
+  float temperature = readTemperature();
+  float humidity = readHumidity();
+  float heatIndex = readHeatIndex(temperature, humidity);
+  if (isnan(temperature) || isnan(humidity) || isnan(heatIndex)) {
+    Serial.println("Failed to read from DHT sensor!");
     return;
   }
 
-  // get sensor reads
-  long readPM25 = getSensorReadPM25();
-  float readTemperature = getSensorReadTemperature();
-  Serial.print("PM2.5 = ");
-  Serial.print(readPM25);
-  Serial.print("; temp = ");
-  Serial.println(readTemperature);
+  // PM25 reads
+  long pm25 = readPM25();
 
   // push reads to server
-  String url = "/reading?pm25=";
-  url += readPM25;
+  String url = "/reading?";
   url += "temp=";
-  url += readTemperature;
-  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
-               "Host: " + CLOUD_HOST + "\r\n" + 
-               "Connection: close\r\n\r\n");
-  delay(10);
+  url += temperature;
+  url += "&&humidity=";
+  url += humidity;
+  url += "&&heatIndex=";
+  url += heatIndex;
+  url += "&&pm25=";
+  url += pm25;
+  Serial.println("URL:" + url);
+  if (!RUN_LOCAL) {
+    client.print(String("GET ") + url + " HTTP/1.1\r\n" +
+                 "Host: " + CLOUD_HOST + "\r\n" + 
+                 "Connection: close\r\n\r\n");
+    delay(10);
 
-  while(client.available()){
-    String line = client.readStringUntil('\r');
-    Serial.print(line);
+    while(client.available()){
+      String line = client.readStringUntil('\r');
+      Serial.print(line);
+    }
   }
 
 }
