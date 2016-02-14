@@ -1,6 +1,9 @@
 #include <ESP8266WiFi.h>
 #include "DHT.h"
 
+// IMPORTANT: set auth properties in here first
+#include "AuthProperties.h"
+
 // run locally, ie. don't push values to server. values are logged to serial
 #define RUN_LOCAL 1
 
@@ -12,10 +15,6 @@
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 const boolean useFahrenheit = false;
-
-// WIFI connection details
-const char* WIFI_SSID     = "<wifi ssid>";
-const char* WIFI_PASSWORD = "<wifi password>";
 
 // push to local test server for now (run test/httpserver.js)
 const char* CLOUD_HOST = "192.168.1.102";
@@ -45,7 +44,7 @@ float readHeatIndex(float temperature, float humidity) {
 void setup() {
   dht.begin();
   randomSeed(analogRead(0));
-  Serial.begin(115200);
+  Serial.begin(9600);
 
   if (!RUN_LOCAL) {
     delay(10);
