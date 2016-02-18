@@ -7,4 +7,6 @@ const char* BLYNK_AUTH = "SET ME!";
 // Blynk server host - required for running private server
 const IPAddress BLYNK_HOST = IPAddress(192,168,1,102);
 
+// Thingspeak write auth key
+const char * TS_WRITE_KEY = "SET ME!";
 
