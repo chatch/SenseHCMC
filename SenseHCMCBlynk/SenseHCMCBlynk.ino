@@ -48,30 +48,25 @@ float readHeatIndex(float temperature, float humidity) {
   return dht.computeHeatIndex(temperature, humidity, USE_FAHRENHEIT);
 }
 
-void sendDHTValue(String label, float value, int blynkPin, unsigned int tsField)
-{
-  if (isnan(value)) {
-    Serial.println("Failed to read " +  label);
-    return;
-  }
-  Serial.print(label + ": ");
-  Serial.println(value);
-  if (!RUN_LOCAL) {
-    Blynk.virtualWrite(blynkPin, value);
-    ThingSpeak.writeField(TS_CHANNEL, tsField, value, TS_WRITE_KEY);
-  }
-}
-
-void sendTemperature()
+void sendValues()
 {
   float temperature = readTemperature();
-  sendDHTValue("temperature", temperature, PIN_TEMPERATURE, TS_FIELD_TEMPERATURE);
-}
-
-void sendHumidity()
-{
   float humidity = readHumidity();
-  sendDHTValue("humidity", humidity, PIN_HUMIDITY, TS_FIELD_HUMIDITY);
+  if (isnan(temperature) || isnan(humidity)) {
+    Serial.println("Failed to read dht11 values");
+    return;
+  }
+  Serial.print("temperature: ");
+  Serial.print(temperature);
+  Serial.print("; humidity: ");
+  Serial.println(humidity);
+  if (!RUN_LOCAL) {
+    Blynk.virtualWrite(PIN_TEMPERATURE, temperature);
+    Blynk.virtualWrite(PIN_HUMIDITY, humidity);
+    ThingSpeak.setField(TS_FIELD_TEMPERATURE, temperature);
+    ThingSpeak.setField(TS_FIELD_HUMIDITY, humidity);
+    ThingSpeak.writeFields(TS_CHANNEL, TS_WRITE_KEY);
+  }
 }
 
 void setup() {
@@ -81,12 +76,12 @@ void setup() {
     Blynk.begin(BLYNK_AUTH, WIFI_SSID, WIFI_PASSWORD, BLYNK_HOST);
     ThingSpeak.begin(client);
   }
-  timer.setInterval(PUSH_INTERVAL, sendTemperature);
-  timer.setInterval(PUSH_INTERVAL, sendHumidity);
+  timer.setInterval(PUSH_INTERVAL, sendValues);
 }
 
 void loop() {
-  Blynk.run();
+  if (!RUN_LOCAL)
+    Blynk.run();
   timer.run();
 }
 
